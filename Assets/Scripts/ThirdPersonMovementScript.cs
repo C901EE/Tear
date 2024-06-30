@@ -29,6 +29,8 @@ public class ThirdPersonMovementScript : MonoBehaviour
     private bool isGrounded;
     private float jumpHorizontalSpeed = 3;
     private float jumpVelocity;
+    private bool isSliding;
+    private Vector3 slopeSlideVelocity;
 
     private void Start()
     {
@@ -86,6 +88,13 @@ public class ThirdPersonMovementScript : MonoBehaviour
 
         ySpeed += gravity * Time.deltaTime;
 
+        SetSlopeSlideVelocity();
+
+        if(slopeSlideVelocity == Vector3.zero)
+        {
+            isSliding = false;
+        }
+
         if (isGrounded)
         {
             lastGroundedTime = Time.time;
@@ -98,8 +107,17 @@ public class ThirdPersonMovementScript : MonoBehaviour
 
         if (Time.time - lastGroundedTime <= jumpButtonGracePeriod)
         {
+            if(slopeSlideVelocity != Vector3.zero)
+            {
+                isSliding = true;
+            }
+
             controller.stepOffset = originalStepOffset;
-            ySpeed = -0.5f;
+
+            if(isSliding == false)
+            {
+                ySpeed = -0.5f;
+            }
 
             animator.SetBool("IsGrounded", true);
             isGrounded = true;
@@ -107,7 +125,7 @@ public class ThirdPersonMovementScript : MonoBehaviour
             isJumping = false;
             animator.SetBool("IsFalling", false);
 
-            if (Time.time - jumpButtonPressedTime <= jumpButtonGracePeriod)
+            if (Time.time - jumpButtonPressedTime <= jumpButtonGracePeriod && isSliding == false)
             {
 
                 ySpeed = Mathf.Sqrt(jumpHeight * -3f * gravity);
@@ -130,7 +148,7 @@ public class ThirdPersonMovementScript : MonoBehaviour
             }
         }
 
-        if(isGrounded == false)
+        if (isGrounded == false && isSliding == false)
         {
 
             if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.JoystickButton1))
@@ -144,12 +162,21 @@ public class ThirdPersonMovementScript : MonoBehaviour
             controller.Move(velocity * Time.deltaTime);
         }
 
+        if (isSliding)
+        {
+            Vector3 velocity = slopeSlideVelocity;
+            velocity.y = ySpeed;
+
+            controller.Move(velocity * Time.deltaTime);
+        }
+
+
 
     }
 
     private void OnAnimatorMove()
     {
-        if (isGrounded)
+        if (isGrounded && isSliding == false)
         {
             Vector3 velocity = animator.deltaPosition;
             velocity.y = ySpeed * Time.deltaTime;
@@ -161,7 +188,7 @@ public class ThirdPersonMovementScript : MonoBehaviour
     }
     private void OnApplicationFocus(bool focus)
     {
-        if(focus)
+        if (focus)
         {
             Cursor.lockState = CursorLockMode.Locked;
         }
@@ -169,5 +196,30 @@ public class ThirdPersonMovementScript : MonoBehaviour
         {
             Cursor.lockState = CursorLockMode.None;
         }
+    }
+
+    private void SetSlopeSlideVelocity()
+    {
+        if (Physics.Raycast(transform.position + Vector3.up, Vector3.down, out RaycastHit hitInfo, 5))
+        {
+            float angle = Vector3.Angle(hitInfo.normal, Vector3.up);
+
+            if(angle >= controller.slopeLimit)
+            {
+                slopeSlideVelocity = Vector3.ProjectOnPlane(new Vector3(0, ySpeed, 0), hitInfo.normal);
+                return;
+            }
+        }
+        if(isSliding)
+        {
+            slopeSlideVelocity -= slopeSlideVelocity * Time.deltaTime * 3;
+
+            if(slopeSlideVelocity.magnitude > 1)
+            {
+                return;
+            }
+        }
+
+        slopeSlideVelocity = Vector3.zero;
     }
 }
